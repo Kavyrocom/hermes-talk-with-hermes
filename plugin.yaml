@@ -1,0 +1,51 @@
+name: talk-with-hermes
+label: Talk with Hermes
+version: 0.2.0
+manifest_version: 1
+kind: standalone
+description: "Talk to your Hermes agent by voice, full duplex, in Hermes Desktop and in Discord voice channels. Adds /talk and a gateway task that brings the agent into the voice channels routed to it."
+author: Kavyro
+license: MIT
+requires_hermes: ">=0.23.0"
+python_dependencies:
+  - "numpy>=2,<3"
+provides_tools: []
+provides_hooks: []
+config_schema:
+  gemini_api_key:
+    type: secret
+    env: GEMINI_API_KEY
+    label: Clé Gemini (AI Studio)
+    description: "Clé créée sur aistudio.google.com/apikey. Saisie ici une seule fois : Desktop et les salons vocaux Discord de tous les agents l'utilisent. Stockée dans le .env de ce profil, jamais copiée ailleurs."
+  openai_api_key:
+    type: secret
+    env: OPENAI_API_KEY
+    label: Clé OpenAI (si modèle gpt-realtime)
+    description: "Clé API de platform.openai.com. Utilisée seulement quand le modèle vocal commence par gpt-."
+  xai_api_key:
+    type: secret
+    env: XAI_API_KEY
+    label: Clé xAI (si modèle grok-voice)
+    description: "Clé API de console.x.ai. Utilisée seulement quand le modèle vocal commence par grok-."
+  model:
+    type: str
+    choices: [gemini-3.8-live, gemini-3.1-flash-live-preview, gpt-realtime-2.1, gpt-realtime-2, grok-voice-latest, grok-voice-3.0]
+    default: gemini-3.8-live
+    label: Modèle vocal
+    description: "Le modèle choisit le service : gemini- (Gemini Live, prouvé en appel réel), gpt- (OpenAI Realtime) ou grok- (Grok Voice), ces deux-là pas encore essayés en appel réel. Les variantes extended-thinking de Gemini sont exclues : elles ne savent pas déléguer à l'agent."
+  voice:
+    type: str
+    default: ""
+    label: Voix par défaut
+    description: "Se choisit dans la page Parler, parmi les voix du service en cours. Une voix d'un autre service est remplacée par la voix par défaut du service."
+  spoken_answers:
+    type: str
+    choices: [full, brief]
+    default: full
+    label: Réponses parlées
+    description: "full : la voix dit toute la réponse de l'agent. brief : deux à quatre phrases."
+  languages:
+    type: str
+    default: fr-FR
+    label: Langues parlées
+    description: "Codes séparés par des virgules, par exemple fr-FR,en-US. Aide la transcription."

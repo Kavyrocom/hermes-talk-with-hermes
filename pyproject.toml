@@ -1,0 +1,8 @@
+# Tooling only, on purpose: no [project] table, which would own packaging.
+# Python dependencies are declared in plugin.yaml (`python_dependencies`);
+# since Hermes 0.23.0 the Desktop Install click is the consent for them.
+# websockets and fastapi ship with Hermes itself.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

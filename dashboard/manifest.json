@@ -1,0 +1,7 @@
+{
+  "name": "talk-with-hermes",
+  "label": "Talk with Hermes",
+  "description": "Backend of the Desktop voice mini-bar. No dashboard tab.",
+  "api": "plugin_api.py",
+  "tab": { "path": "/talk-with-hermes", "hidden": true }
+}
