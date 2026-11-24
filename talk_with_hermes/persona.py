@@ -169,11 +169,14 @@ MAX_CONTEXT_LINE_CHARS = 400
 MAX_CONTEXT_CHARS = 3000
 _SPEAKERS = {"toi": "Opérateur", "user": "Opérateur", "hermes": "Toi", "assistant": "Agent"}
 _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+#: The fence of `context_block`. A recalled line keeps at most two in a row.
+_FENCE = re.compile(r"<{3,}|>{3,}")
 
 
 def clean_context(rows: Any) -> tuple[str, ...]:
     """The last lines of a conversation, as `Speaker : text`, bounded.
-    Unknown speakers and empty texts are dropped; nothing else is trusted."""
+    Unknown speakers and empty texts are dropped; nothing else is trusted.
+    Each text becomes one line that cannot carry the fence markers."""
 
     if not isinstance(rows, list):
         return ()
@@ -182,7 +185,8 @@ def clean_context(rows: Any) -> tuple[str, ...]:
         if not isinstance(row, dict):
             continue
         who = _SPEAKERS.get(str(row.get("who") or row.get("role") or ""))
-        text = _CONTROL.sub(" ", str(row.get("text") or "")[:MAX_CONTEXT_LINE_CHARS * 2]).strip()
+        text = " ".join(_CONTROL.sub(" ", str(row.get("text") or "")[:MAX_CONTEXT_LINE_CHARS * 2]).split())
+        text = _FENCE.sub(lambda m: m.group(0)[:2], text)
         if who and text:
             out.append(f"{who} : {text[:MAX_CONTEXT_LINE_CHARS]}")
     out = out[-MAX_CONTEXT_LINES:]
