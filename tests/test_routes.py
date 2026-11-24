@@ -57,3 +57,43 @@ def test_fit_voice_alone():
     assert services.fit_voice(gemini, "marin") == "Puck"
     assert services.fit_voice(gemini, "Kore") == "Kore"
     assert services.fit_voice(gemini, "nobody") == "nobody"
+
+
+def test_every_post_route_refuses_an_oversized_body(api):
+    """One cap for the six POST routes: a body over 1 MiB gets a 413, with or
+    without a Content-Length. A normal body still goes through."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    module, _ = api
+    app = FastAPI()
+    app.include_router(module.router)
+    client = TestClient(app)
+    posts = sorted(r.path for r in module.router.routes if "POST" in r.methods)
+    assert posts == ["/answer", "/audio", "/mute", "/prefs", "/start", "/stop"]
+    big = b'{"data": "' + b"A" * 2**20 + b'"}'
+    json_type = {"content-type": "application/json"}
+    for path in posts:
+        assert client.post(path, content=big, headers=json_type).status_code == 413, path
+        chunked = client.post(path, content=iter([big[:1000], big[1000:]]), headers=json_type)
+        assert chunked.status_code == 413, path
+    assert client.post("/stop", json={"owner": "x"}).status_code == 200
+    assert client.post("/stop").status_code == 200  # no body at all, as before
+
+
+def test_a_declared_oversized_body_is_refused_unread(api):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    module, _ = api
+    reads = []
+
+    async def receive():
+        reads.append(1)
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+
+    scope = {"type": "http", "method": "POST", "path": "/audio", "query_string": b"",
+             "headers": [(b"content-length", str(2**20 + 1).encode())]}
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(module.json_body(Request(scope, receive)))
+    assert refused.value.status_code == 413 and reads == []
