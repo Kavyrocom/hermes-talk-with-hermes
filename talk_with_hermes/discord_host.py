@@ -204,15 +204,54 @@ async def profile_scope(profile: str) -> AsyncIterator[Path]:
         yield home
 
 
+def _loaded_api_server_extra() -> dict[str, Any] | None:
+    """The API server settings of the config the gateway loaded at startup,
+    API_SERVER_HOST and API_SERVER_PORT applied. None outside the gateway."""
+
+    platforms = getattr(getattr(runner(), "config", None), "platforms", None)
+    if not isinstance(platforms, dict):
+        return None
+    for platform, platform_config in platforms.items():
+        if getattr(platform, "value", platform) == "api_server":
+            extra = getattr(platform_config, "extra", None)
+            return extra if isinstance(extra, dict) else {}
+    return None
+
+
+def _listen_address(extra: dict[str, Any]) -> tuple[Any, Any]:
+    """Hermes' own reading of the settings, the one its API server binds with,
+    taken from the loaded module (never imported from here). The same rule
+    when the API server is not running."""
+
+    import os
+    import sys
+
+    listen_address: Any = getattr(sys.modules.get("gateway.platforms.api_server"), "listen_address", None)
+    if listen_address is not None:
+        host, port = listen_address(extra)
+        return host, port
+    port = extra.get("port")
+    return (extra.get("host", os.getenv("API_SERVER_HOST", "127.0.0.1")),
+            os.getenv("API_SERVER_PORT", "8642") if port is None else port)
+
+
 def api_server_base() -> str:
+    """Where the gateway's API server listens, read as the gateway binds it.
+    config.yaml alone only outside the gateway."""
+
     try:
-        config = gateway_config()
-        extra = ((config.get("platforms") or {}).get("api_server") or {}).get("extra") or {}
-        host, port = str(extra.get("host") or "127.0.0.1"), int(extra.get("port") or 8642)
+        extra = _loaded_api_server_extra()
+        if extra is None:
+            config = gateway_config()
+            extra = ((config.get("platforms") or {}).get("api_server") or {}).get("extra") or {}
+        host, port = _listen_address(extra)
+        host, port = str(host or ""), int(port)
     except Exception:
         host, port = "127.0.0.1", 8642
     if host in {"0.0.0.0", "::", ""}:
         host = "127.0.0.1"
+    if ":" in host:
+        host = f"[{host}]"
     return f"http://{host}:{port}"
 
 

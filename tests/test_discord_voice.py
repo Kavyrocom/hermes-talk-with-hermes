@@ -2,6 +2,7 @@
 
 import asyncio
 import dataclasses
+import enum
 import inspect
 import json
 import logging
@@ -206,6 +207,7 @@ def test_the_agent_door_is_the_gateway_api_server_on_loopback(tmp_path, monkeypa
     (tmp_path / "config.yaml").write_text(
         "platforms:\n  api_server:\n    extra: {host: 0.0.0.0, port: 9000}\n", encoding="utf-8")
     monkeypatch.setattr(discord_host, "profile_home", lambda name: tmp_path)
+    monkeypatch.setattr(discord_host, "runner", lambda: None)  # outside the gateway: config.yaml
     assert discord_host.api_server_base() == "http://127.0.0.1:9000"
 
 
@@ -762,6 +764,7 @@ def test_the_gateway_config_is_parsed_again_only_when_it_changes(tmp_path, monke
     config = tmp_path / "config.yaml"
     config.write_text("platforms:\n  api_server:\n    extra: {port: 9000}\n", encoding="utf-8")
     monkeypatch.setattr(discord_host, "profile_home", lambda name: tmp_path)
+    monkeypatch.setattr(discord_host, "runner", lambda: None)  # outside the gateway: config.yaml
     parsed = []
     real = sys.modules["hermes_yaml"].safe_load
     monkeypatch.setattr(sys.modules["hermes_yaml"], "safe_load", lambda text: parsed.append(1) or real(text))
@@ -960,3 +963,28 @@ def test_leaving_drops_the_held_audio_even_without_the_host_helper(caplog):
             asyncio.run(discord_host.leave(adapter, 7))
         assert adapter.left == [(b"", {})], helper
         assert "discard" in caplog.text
+
+
+def test_the_agent_door_is_where_the_gateway_bound_its_api_server(tmp_path, monkeypatch, host_yaml):
+    """The gateway binds the API server from the config it loaded at startup,
+    with API_SERVER_HOST and API_SERVER_PORT applied. A port given only there
+    must not send the call, and its door key, to whatever listens on 8642."""
+
+    (tmp_path / "config.yaml").write_text("platforms:\n  api_server:\n    extra: {}\n", encoding="utf-8")
+    monkeypatch.setattr(discord_host, "profile_home", lambda name: tmp_path)
+    for name in ("API_SERVER_HOST", "API_SERVER_PORT"):
+        monkeypatch.delenv(name, raising=False)
+
+    def loaded(extra):
+        api_server = enum.Enum("Platform", {"API_SERVER": "api_server"}).API_SERVER
+        config = types.SimpleNamespace(platforms={api_server: types.SimpleNamespace(extra=extra)})
+        return lambda: types.SimpleNamespace(config=config)
+
+    monkeypatch.setattr(discord_host, "runner", loaded({"host": "127.0.0.1", "port": 9100}))
+    assert discord_host.api_server_base() == "http://127.0.0.1:9100"
+    monkeypatch.setattr(discord_host, "runner", loaded({"host": "::1", "port": 9101}))
+    assert discord_host.api_server_base() == "http://[::1]:9101"
+
+    monkeypatch.setattr(discord_host, "runner", lambda: None)  # outside the gateway: Hermes' rule
+    monkeypatch.setenv("API_SERVER_PORT", "9102")
+    assert discord_host.api_server_base() == "http://127.0.0.1:9102"
