@@ -241,12 +241,22 @@ async def join(adapter: Any, channel: Any) -> tuple[Any, Any]:
 
 async def leave(adapter: Any, guild_id: int) -> None:
     """Drop what the receiver still holds first: on leave, the host would
-    transcribe it and start an agent turn nobody asked for."""
+    transcribe it and start an agent turn nobody asked for. Without the
+    host's helper, the buffers are emptied here and the miss is logged."""
 
     try:
         adapter.discard_pending_voice_input(guild_id)
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("talk-with-hermes: host discard_pending_voice_input failed (%s), "
+                    "emptying the voice buffers directly", type(exc).__name__)
+        receiver = getattr(adapter, "_voice_receivers", {}).get(guild_id)
+        if receiver is not None:
+            try:
+                with receiver._lock:
+                    receiver._buffers.clear()
+                    receiver._last_packet_time.clear()
+            except Exception:
+                log.warning("talk-with-hermes: could not empty the voice buffers", exc_info=True)
     await adapter.leave_voice_channel(guild_id)
 
 

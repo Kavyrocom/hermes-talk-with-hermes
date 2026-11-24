@@ -930,3 +930,33 @@ def test_failed_starts_back_off_and_a_new_entry_retries_at_once():
 
     asyncio.run(run())
     assert attempts == ["iris", "iris"]
+
+
+def test_leaving_drops_the_held_audio_even_without_the_host_helper(caplog):
+    """The host would transcribe on leave what the receiver still holds, and
+    start an agent turn nobody asked for. Without its discard helper (renamed
+    or failing), the buffers are emptied here and the miss is logged."""
+
+    class Adapter:
+        def __init__(self, receiver, helper):
+            self._voice_receivers = {7: receiver}
+            self.left = []
+            if helper is not None:
+                self.discard_pending_voice_input = helper
+
+        async def leave_voice_channel(self, guild_id):
+            receiver = self._voice_receivers[guild_id]
+            self.left.append((bytes(receiver._buffers.get(9, b"")), dict(receiver._last_packet_time)))
+
+    def broken(guild_id):
+        raise RuntimeError("helper changed")
+
+    for helper in (None, broken):
+        receiver = FakeReceiver({})
+        receiver.push(9, b"half a sentence")
+        adapter = Adapter(receiver, helper)
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger=discord_host.__name__):
+            asyncio.run(discord_host.leave(adapter, 7))
+        assert adapter.left == [(b"", {})], helper
+        assert "discard" in caplog.text
