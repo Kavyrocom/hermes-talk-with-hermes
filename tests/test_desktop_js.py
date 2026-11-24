@@ -276,6 +276,32 @@ test('the plugin adds a Talk page, its sidebar row and a status bar chip, nothin
   assert.equal(route.title, 'Parler')
 })
 
+test('the sidebar row, the tab title and the command follow a language Desktop sets after load', async () => {
+  // Desktop starts in English and switches once it has read display.language:
+  // a label computed only at registration stayed "Talk" on a French Desktop.
+  const plugin = (await import('./plugin.js')).default
+  const shown = new Map(), changes = [], disposers = []
+  let locale = 'en', bundles = {}
+  const t = (key, ...a) => {
+    const v = key.split('.').reduce((o, k) => o?.[k], bundles[locale])
+    return typeof v === 'function' ? v(...a) : v ?? key
+  }
+  const put = cs => { cs.forEach(c => shown.set(c.id, c)); return () => {} }
+  globalThis.document = { createElement: () => ({ dataset: {}, remove() {} }), head: { append() {} } }
+  plugin.register({
+    onDispose: fn => disposers.push(fn), onEvent() {}, rest: async () => ({}), setInterval: () => () => {}, setTimeout() {},
+    register: c => put([c]), registerMany: put,
+    i18n: { register: b => { bundles = b }, t, onLocaleChange: fn => { changes.push(fn); return () => {} } },
+  })
+  assert.equal(shown.get('nav').data.label, 'Talk')
+  locale = 'fr'
+  changes.forEach(fn => fn())
+  assert.equal(shown.get('nav').data.label, 'Parler')
+  assert.equal(shown.get('page').title, 'Parler')
+  assert.equal(shown.get('open').data.label, 'Parler à mon agent')
+  disposers.forEach(fn => fn())
+})
+
 test('the dictionary fixes whole words only, like the backend', () => {
   const words = [{ word: 'Kavyro', heard: ['Caviro', 'Cavaro'] }, { word: 'FluentCart', heard: ['fluent cart'] }]
   assert.equal(fixWords('mon dossier caviro, et Cavaro ?', words), 'mon dossier Kavyro, et Kavyro ?')

@@ -1892,12 +1892,16 @@ export default {
     document.head.append(style)
     ctx.onDispose(() => style.remove())
     const call = createCall(ctx)
-    ctx.registerMany([
+    ctx.registerMany([{ area: STATUSBAR_AREAS.right, id: 'call', order: 5, render: () => jsx(CallChip, { call }) }])
+    // Desktop applies display.language after plugins load. Same ids replace in place,
+    // so the row, the tab title and the command follow each switch without a remount.
+    const labels = () => ctx.registerMany([
       { area: ROUTES_AREA, data: { path: ROUTE }, id: 'page', title: T('nav.talk'), render: () => jsx(TalkPage, { call }) },
       { area: SIDEBAR_NAV_AREA, data: { codicon: 'mic', label: T('nav.talk'), path: ROUTE }, id: 'nav' },
-      { area: STATUSBAR_AREAS.right, id: 'call', order: 5, render: () => jsx(CallChip, { call }) },
       { area: PALETTE_AREA, id: 'open', data: { id: 'talk-with-hermes.open', label: T('palette.open'),
         keywords: ['parler', 'talk', 'voix', 'voice', 'vocal', 'appel', 'call', 'micro', 'mic', 'hablar', 'voz', 'llamada'], run: () => host.navigate(ROUTE) } }
     ])
+    labels()
+    ctx.i18n?.onLocaleChange?.(labels)
   }
 }
