@@ -270,9 +270,13 @@ class DesktopCall:
             return {**self.summary(), "owner": self.owner}
 
     def owns(self, owner: str | None) -> bool:
-        """`None` is the in-process caller (tests); the routes always pass a string."""
+        """`None` is the in-process caller (tests); the routes always pass a string.
+        Compared as bytes: `compare_digest` raises on non-ASCII text."""
 
-        return owner is None or (bool(self.owner) and secrets.compare_digest(str(owner), self.owner))
+        if owner is None:
+            return True
+        return bool(self.owner) and secrets.compare_digest(
+            str(owner).encode("utf-8", "replace"), self.owner.encode("utf-8"))
 
     async def audio(self, data_b64: Any, owner: str | None = None) -> bool:
         if self.status != LIVE or self.session is None or not isinstance(data_b64, str) or not self.owns(owner):

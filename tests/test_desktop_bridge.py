@@ -492,3 +492,21 @@ def test_a_long_task_gets_the_same_generous_ceiling_on_both_sides():
 
     assert desktop_bridge.DELEGATION_TIMEOUT_S >= 600
     assert renderer_ms == int(desktop_bridge.DELEGATION_TIMEOUT_S * 1000)
+
+
+def test_a_non_ascii_owner_is_refused_like_any_wrong_owner(tmp_path):
+    """compare_digest raises on non-ASCII text: the route would answer 500
+    instead of telling the window the call is no longer its own."""
+
+    async def run():
+        call = make_call(tmp_path)
+        owner = (await call.start())["owner"]
+        wrong = call.poll(0, owner="x" * len(owner))
+        accented = call.poll(0, owner="é" * len(owner))
+        refused = (call.owns("é"), await call.audio("AAAA", "é"), call.answer("c1", "x", owner="é"))
+        await call.stop(owner)
+        return wrong, accented, refused
+
+    wrong, accented, refused = asyncio.run(run())
+    assert accented == wrong and accented["owner_ok"] is False
+    assert refused[0] is False and refused[1] is False and refused[2] != "accepted"
