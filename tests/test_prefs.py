@@ -127,7 +127,7 @@ def test_a_delegated_request_is_corrected_and_prefs_are_read_at_start(tmp_path):
     store.save(Prefs("vous", (KAVYRO,)))
 
     async def run():
-        call = DesktopCall(settings=dict, api_key=lambda: "k", handles=HandleStore(tmp_path / "r.json"),
+        call = DesktopCall(settings=dict, api_key=lambda _service: "k", handles=HandleStore(tmp_path / "r.json"),
                            prefs=store, session_factory=_Session)
         await call.start()
         session = _Session.instances[-1]

@@ -87,7 +87,7 @@ def test_a_call_names_the_agent_and_rereads_it(tmp_path):
             return None
 
     async def run():
-        call = DesktopCall(settings=dict, api_key=lambda: "k", handles=HandleStore(tmp_path / "r.json"),
+        call = DesktopCall(settings=dict, api_key=lambda _service: "k", handles=HandleStore(tmp_path / "r.json"),
                            prefs=PrefsStore(tmp_path / "p.json"), session_factory=Session,
                            identity=lambda: identity.Identity(next(names), ""))
         before = call.refresh_key()["agent"]

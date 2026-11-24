@@ -184,7 +184,7 @@ class DesktopCall:
         self,
         *,
         settings: Callable[[], dict[str, Any]] = load_settings,
-        api_key: Callable[[], str] = load_api_key,
+        api_key: Callable[["services.Service"], str] = load_api_key,
         handles: HandleStore | None = None,
         prefs: PrefsStore | None = None,
         session_factory: Callable[..., Any] = services.open_session,
@@ -231,7 +231,12 @@ class DesktopCall:
         `link`: {title, lines} of a chat session the voice works on."""
 
         async with self._lock:
-            self._has_key = bool(self._api_key())
+            # One read: the model, its key and the error label agree even if
+            # the operator changes the settings while the call starts.
+            settings = self._settings()
+            service = services.current(settings)
+            key = self._api_key(service)
+            self._has_key = bool(key)
             self._last_seen = time.monotonic()
             if self.status in (CONNECTING, LIVE):
                 self._fail_waiting()  # the old renderer was running them
@@ -244,7 +249,7 @@ class DesktopCall:
             try:
                 self._call_prefs = self.prefs.load()
                 self._who = self._identity()
-                config = config_from(self._settings(), self._api_key(), self._call_prefs, self._who,
+                config = config_from(settings, key, self._call_prefs, self._who,
                                      context=start_context(resume, link, lang))
                 session = self._session_factory(
                     config,
@@ -261,8 +266,7 @@ class DesktopCall:
             except Exception as exc:  # network, DNS, TLS: say it, do not crash the route
                 log.warning("talk-with-hermes: start failed", exc_info=True)
                 self.session = None
-                label = services.current(self._settings()).label
-                self._end(ERROR, f"Connexion à {label} impossible : {type(exc).__name__}.")
+                self._end(ERROR, f"Connexion à {service.label} impossible : {type(exc).__name__}.")
             else:
                 if self.status == CONNECTING:
                     self.status = LIVE
@@ -385,7 +389,7 @@ class DesktopCall:
     def refresh_key(self) -> dict[str, Any]:
         """/status: re-read the key (the operator may just have pasted it)."""
 
-        self._has_key = bool(self._api_key())
+        self._has_key = bool(self._api_key(services.current(self._settings())))
         if self.status not in (CONNECTING, LIVE):
             self._who = self._identity()  # the page names the agent before the first call
         return self.summary()

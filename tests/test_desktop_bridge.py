@@ -50,7 +50,7 @@ def make_call(tmp_path, *, key="k", settings=None, fail=None, timeout=5.0):
 
     return DesktopCall(
         settings=lambda: dict(settings or {}),
-        api_key=lambda: key,
+        api_key=lambda _service: key,
         handles=HandleStore(tmp_path / "resume.json"),
         prefs=PrefsStore(tmp_path / "prefs.json"),
         session_factory=factory,
@@ -148,7 +148,7 @@ def test_start_goes_live_with_the_settings_and_the_stored_handle(tmp_path):
 
 def test_missing_key_is_a_speakable_error_not_a_crash(tmp_path):
     async def run():
-        call = DesktopCall(settings=dict, api_key=lambda: "", handles=HandleStore(tmp_path / "r.json"))
+        call = DesktopCall(settings=dict, api_key=lambda _service: "", handles=HandleStore(tmp_path / "r.json"))
         return await call.start()
 
     result = asyncio.run(run())
@@ -269,7 +269,7 @@ def test_polling_acknowledges_what_the_renderer_already_has(tmp_path):
 
 def test_the_feed_is_bounded(tmp_path):
     async def run():
-        call = DesktopCall(settings=dict, api_key=lambda: "k", handles=HandleStore(tmp_path / "r.json"),
+        call = DesktopCall(settings=dict, api_key=lambda _service: "k", handles=HandleStore(tmp_path / "r.json"),
                            session_factory=lambda c, h, **kw: FakeSession(c, h, **kw), max_events=3)
         await call.start()
         for i in range(10):
@@ -285,7 +285,7 @@ def test_a_full_feed_drops_audio_then_text_but_never_a_delegate_or_a_cancel(tmp_
     never runs or never stops."""
 
     async def run():
-        call = DesktopCall(settings=dict, api_key=lambda: "k", handles=HandleStore(tmp_path / "r.json"),
+        call = DesktopCall(settings=dict, api_key=lambda _service: "k", handles=HandleStore(tmp_path / "r.json"),
                            session_factory=lambda c, h, **kw: FakeSession(c, h, **kw), max_events=4)
         await call.start()
         handlers = FakeSession.instances[-1].handlers
@@ -428,7 +428,7 @@ def test_stop_releases_a_pending_delegation(tmp_path):
 
 
 def test_unknown_ids_are_refused():
-    assert DesktopCall(settings=dict, api_key=lambda: "k", handles=HandleStore(Path(os.devnull))).answer("nope", "x") == "unknown"
+    assert DesktopCall(settings=dict, api_key=lambda _service: "k", handles=HandleStore(Path(os.devnull))).answer("nope", "x") == "unknown"
 
 
 # -- handle store -------------------------------------------------------------
@@ -510,3 +510,34 @@ def test_a_non_ascii_owner_is_refused_like_any_wrong_owner(tmp_path):
     wrong, accented, refused = asyncio.run(run())
     assert accented == wrong and accented["owner_ok"] is False
     assert refused[0] is False and refused[1] is False and refused[2] != "accepted"
+
+
+def test_the_key_comes_from_the_same_settings_read_as_the_model(tmp_path):
+    """The settings may change while a call starts (the operator switches the
+    model). The model, its key and the error label come from one read, so a
+    key never goes to another service than its own."""
+
+    gemini = services.SERVICES[services.GEMINI].default_model
+    openai = services.SERVICES[services.OPENAI].default_model
+    models = iter([gemini, openai] * 5)
+    reads = []
+
+    def settings():
+        reads.append(1)
+        return {"model": next(models)}
+
+    def key(service=None):
+        service = service or services.current(settings())  # what load_api_key does alone
+        return "key-for-" + service.label
+
+    async def run():
+        FakeSession.instances = []
+        call = DesktopCall(settings=settings, api_key=key, handles=HandleStore(tmp_path / "r.json"),
+                           prefs=PrefsStore(tmp_path / "p.json"),
+                           session_factory=lambda config, handlers, **kw: FakeSession(config, handlers, **kw))
+        await call.start()
+        return FakeSession.instances[0].config
+
+    config = asyncio.run(run())
+    assert config.api_key == "key-for-" + services.for_model(config.model).label
+    assert len(reads) == 1

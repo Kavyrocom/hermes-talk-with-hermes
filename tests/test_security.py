@@ -34,7 +34,7 @@ class Session:
 
 def make(tmp_path, **kw):
     Session.instances = []
-    return DesktopCall(settings=dict, api_key=lambda: "k", handles=HandleStore(tmp_path / "r.json"),
+    return DesktopCall(settings=dict, api_key=lambda _service: "k", handles=HandleStore(tmp_path / "r.json"),
                        prefs=PrefsStore(tmp_path / "p.json"), session_factory=Session, **kw)
 
 
@@ -92,7 +92,7 @@ def test_a_takeover_mid_delegation_still_answers_the_voice_model_once(tmp_path):
             return realtime.RealtimeSession(cfg, handlers, dialect=realtime.XAI, connect=connect, **kw)
 
         model = "gemini-3.8-live" if kind == "gemini" else "grok-voice-latest"
-        call = DesktopCall(settings=lambda: {"model": model}, api_key=lambda: "k",
+        call = DesktopCall(settings=lambda: {"model": model}, api_key=lambda _service: "k",
                            handles=HandleStore(tmp_path / f"{kind}.json"), prefs=PrefsStore(tmp_path / "p.json"),
                            session_factory=factory, identity=identity_mod.Identity)
         await call.start()
