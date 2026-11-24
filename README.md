@@ -1,86 +1,87 @@
 # talk-with-hermes
 
-Parler à un agent Hermes à la voix, en duplex : dans Hermes Desktop et dans les salons vocaux Discord.
+Talk to a Hermes agent by voice, full duplex: in Hermes Desktop and in Discord voice channels.
 
-## État
+## Status
 
-| Surface ou service | État |
+| Surface or service | Status |
 |---|---|
-| Hermes Desktop avec Gemini Live | Utilisé en appel réel depuis le 20/11/2026. |
-| Salons vocaux Discord | Codé et testé contre des faux. En réel, seule la connexion vocale est prouvée : le bot rejoint le salon. Un appel complet (écoute, réponse, délégation à l'agent) reste à faire. |
-| OpenAI Realtime, Grok Voice | Écrits depuis la documentation des fournisseurs, testés contre un faux serveur, jamais en appel réel. |
+| Hermes Desktop with Gemini Live | In real calls since 2026-11-20. |
+| Discord voice channels | Written and tested against fakes. Live, only the voice connection is proven: the bot joins the channel. A full call (listening, answer, delegation to the agent) is still to be done. |
+| OpenAI Realtime, Grok Voice | Written from the providers' documentation, tested against a fake server, never in a real call. |
 
-Un modèle n'est annoncé comme pris en charge qu'après un appel réel : une phrase dite, une réponse entendue.
+A model is listed as supported only after a real call: a sentence said, an answer heard.
 
 ## Installation
 
-1. Hermes Desktop, Réglages, Plugins : installer `talk-with-hermes` dans le profil de l'agent.
-2. Page de réglages du plugin : coller la clé du service vocal (Gemini par défaut). C'est le seul endroit où une clé se saisit. Desktop et les salons vocaux Discord de tous les agents la lisent là, elle n'est copiée nulle part.
-3. La clé de la porte locale de chaque agent (`API_SERVER_KEY`, 127.0.0.1) n'est pas à saisir : au premier appel vocal, le plugin la crée dans le `.env` du profil de l'agent si elle manque. Il n'en remplace jamais une existante.
+1. Hermes Desktop, Settings, Plugins: install `talk-with-hermes` in the agent's profile.
+2. Plugin settings page: paste the voice service key (Gemini by default). This is the only place where a key is entered. Desktop and the Discord voice channels of every agent read it there, and it is copied nowhere else.
+3. The key to each agent's local API server (`API_SERVER_KEY`, 127.0.0.1) is not entered by hand: on the first voice call, the plugin creates it in the `.env` of the agent's profile if it is missing. It never replaces an existing one.
 
-Dépendance Python déclarée dans le manifeste : `numpy` 2.x. La partie Discord s'appuie sur la plateforme Discord de Hermes et ses dépendances vocales (`discord.py[voice]`).
+Python dependency declared in the manifest: `numpy` 2.x. The Discord part relies on Hermes' Discord platform and its voice dependencies (`discord.py[voice]`).
 
 ## Discord
 
-Un salon vocal routé vers un agent est son salon vocal. Une ligne dans `gateway.profile_routes` du `config.yaml` du gateway :
+A voice channel routed to an agent is that agent's voice channel. One entry under `gateway.profile_routes` in the gateway's `config.yaml`:
 
 ```yaml
 gateway:
   profile_routes:
-    - name: <agent>-vocal
+    - name: <agent>-voice
       platform: discord
-      guild_id: '<id du serveur>'
-      chat_id: '<id du salon vocal>'
+      guild_id: '<server id>'
+      chat_id: '<voice channel id>'
       profile: <agent>
 ```
 
-Le vocal applique les routes du gateway avec sa propre règle : celles qu'il a chargées au démarrage, comme pour les salons texte. Une nouvelle ligne compte donc après un redémarrage du gateway. Une ligne `enabled: false`, réservée à un `user_id`, prévue pour le bot d'un autre profil (`bot_profile`) ou pour un autre serveur n'ouvre pas d'appel : un appel sert tout le salon, avec le bot du gateway. Si deux lignes visent le même salon, la plus précise l'emporte.
+Voice applies the gateway's routes with its own rule: the routes loaded at startup, as for text channels. A new entry therefore counts after a gateway restart. An entry with `enabled: false`, restricted to a `user_id`, meant for another profile's bot (`bot_profile`) or for another server does not open a call: one call serves the whole channel, with the gateway's bot. If two entries target the same channel, the more specific one wins.
 
-Tu entres dans le salon : l'agent arrive et l'appel démarre. Tu sors : il part quelques secondes après. `/talk` depuis le salon texte d'un agent le fait venir dans ton salon vocal, `/talk leave` raccroche.
+You join the channel: the agent arrives and the call starts. You leave: it leaves a few seconds later. `/talk` from an agent's text channel brings it into your voice channel, `/talk leave` hangs up.
 
-Seuls les comptes de l'allowlist Discord du gateway (`DISCORD_ALLOWED_USERS` ou rôles) sont entendus, et eux seuls peuvent utiliser `/talk` et `/talk leave`. `DISCORD_ALLOWED_CHANNELS` seul ouvre un salon texte, pas la voix.
+Only accounts on the gateway's Discord allowlist (`DISCORD_ALLOWED_USERS` or roles) are heard, and only they can use `/talk` and `/talk leave`. `DISCORD_ALLOWED_CHANNELS` alone opens a text channel, not voice.
 
-## Prérequis réseau : UDP sortant
+## Network prerequisite: outbound UDP
 
-La voix Discord passe en UDP. Si le serveur ne reçoit pas de réponse UDP d'internet, le bot entre dans le salon mais ne parle jamais. Dans les logs : `Voice handshake complete` puis `Timed out connecting to voice` 30 s après.
+Discord voice runs over UDP. If the server gets no UDP replies from the internet, the bot joins the channel but never speaks. In the logs: `Voice handshake complete`, then `Timed out connecting to voice` 30 s later.
 
-Sur un VPS Hetzner Cloud, c'est le pare-feu Cloud qu'il faut ouvrir (le pare-feu de la machine peut tout autoriser, ça ne suffit pas) :
+On a Hetzner Cloud VPS, the Cloud firewall is the one to open (the machine's own firewall can allow everything, that is not enough):
 
-- Console Hetzner Cloud, Firewalls, le pare-feu du serveur.
-- Outbound rules : protocole UDP, ports any (ou `50000-65535`), destination Any IPv4 et Any IPv6.
+- Hetzner Cloud Console, Firewalls, the server's firewall.
+- Outbound rules: protocol UDP, ports any (or `50000-65535`), destination Any IPv4 and Any IPv6.
 
-Vérifier depuis le serveur :
+Check from the server:
 
 ```bash
 tailscale netcheck | grep UDP   # UDP: true
 ```
 
-Sans Tailscale, n'importe quel client STUN (par exemple vers `stun.cloudflare.com:3478`) doit recevoir une réponse.
+Without Tailscale, any STUN client (for example against `stun.cloudflare.com:3478`) must get a reply.
 
-## Ce que le plugin fait sur ta machine
+## What the plugin does on your machine
 
-- **Audio** : pendant l'appel, ce que tu dis (micro de Desktop, ou salon vocal Discord) part en continu chez le service vocal choisi : Google, OpenAI ou xAI.
-- **Identité** : le nom de l'agent, le premier paragraphe de son `SOUL.md` et sa section `## Style` partent aussi chez ce service, bornés à 40, 400 et 700 caractères. Rien d'autre du profil : ni le reste du `SOUL.md`, ni la mémoire.
-- **Délégation** : quand la voix confie une demande à l'agent, elle passe par l'API server local du gateway (127.0.0.1), sous les approbations habituelles de Hermes. La demande et la réponse restent dans les sessions de l'agent, comme toute conversation Hermes.
-- **Discord** : une tâche de fond, dans le gateway, surveille les salons vocaux routés vers un agent et y fait entrer l'agent quand un membre autorisé arrive.
-- **Fichiers** : dans le profil où le plugin est installé, `plugin-state/talk-with-hermes/prefs.json` (tutoiement, dictionnaire) et `resume.json` (le seul jeton de reprise de session que donne Gemini). Le plugin n'écrit ni audio ni transcription sur le disque du serveur.
-- **Desktop** : les 16 dernières répliques du dernier appel, 400 caractères au plus chacune, restent dans le stockage du plugin sur ton ordinateur, pour reprendre la conversation. Sans expiration pour l'instant.
-- **Gemini, quota gratuit** : sur le quota gratuit de l'API Gemini, Google utilise le contenu envoyé et les réponses pour améliorer ses produits ([conditions de l'API Gemini](https://ai.google.dev/gemini-api/terms), section Unpaid Services). À savoir avant d'y faire passer des données sensibles.
+- **Audio**: during a call, what you say (Desktop microphone, or Discord voice channel) streams continuously to the chosen voice service: Google, OpenAI or xAI.
+- **Identity**: the agent's name, the first paragraph of its `SOUL.md` and its `## Style` section also go to that service, capped at 40, 400 and 700 characters. Nothing else from the profile: neither the rest of `SOUL.md` nor memory.
+- **Delegation**: when the voice hands a request to the agent, the request goes through the gateway's local API server (127.0.0.1), under Hermes' usual approvals. The request and the answer stay in the agent's sessions, like any Hermes conversation.
+- **Discord**: a background task in the gateway watches the voice channels routed to an agent and brings the agent in when an allowed member arrives.
+- **Files**: in the profile where the plugin is installed, `plugin-state/talk-with-hermes/prefs.json` (whether the voice says *tu* or *vous*, and the dictionary) and `resume.json` (the only session resumption token Gemini gives). The plugin writes neither audio nor transcripts to the server's disk.
+- **Desktop**: the last 16 lines of the last call, 400 characters at most each, stay in the plugin's storage on your computer, to resume the conversation. No expiry for now.
+- **Gemini free tier**: on the free tier of the Gemini API, Google uses the content sent and the responses to improve its products ([Gemini API terms](https://ai.google.dev/gemini-api/terms), Unpaid Services section). Worth knowing before passing sensitive data through it.
 
-## Limites connues
+## Known limits
 
-- N'active pas ce plugin à côté de `hermes-talk` sur le même Hermes : les deux déclarent `/talk`, et le dernier chargé gagne sans prévenir.
-- Hermes n'a pas encore de surface publique pour deux besoins du plugin, importés en privé : `gateway.run._async_profile_runtime_scope` et `gateway.run._gateway_runner_ref`. La partie Discord lit aussi des internes du récepteur vocal de Hermes. Rien ne les contrôle pendant l'appel : le test de contrat (section Tests) les vérifie contre le Hermes installé. Relance-le après chaque mise à jour de Hermes.
-- Si l'API server du gateway écoute sur une adresse précise autre que la boucle locale, la clé de la porte locale y circule en clair (http). Garde-le sur 127.0.0.1.
-- Le texte que l'agent renvoie revient au modèle vocal. Un contenu piégé lu par l'agent (une page web, par exemple) peut pousser la voix à lui confier une nouvelle demande : tu entends l'annonce et la réponse, pas la demande elle-même. Les approbations de Hermes restent la barrière.
-- Desktop : si l'envoi d'une demande à l'agent échoue, elle est relancée dans une nouvelle session, et peut alors tourner deux fois.
-- OpenAI Realtime et Grok Voice : une demande que tu annules continue, et sa réponse est envoyée au modèle.
+- The voice instructions are written in French. They tell the voice to answer in the language you just used. Only French has been used in real calls. The `languages` setting (default `fr-FR`) is a hint for transcription: set it to the codes of the languages you speak.
+- Do not enable this plugin next to `hermes-talk` on the same Hermes: both declare `/talk`, and the last one loaded wins without warning.
+- Hermes has no public surface yet for two things the plugin needs, imported privately: `gateway.run._async_profile_runtime_scope` and `gateway.run._gateway_runner_ref`. The Discord part also reads internals of Hermes' voice receiver. Nothing checks them during a call: the contract test (Tests section) checks them against the installed Hermes. Run it again after each Hermes update.
+- If the gateway's API server listens on a specific address other than loopback, the key to the local API server travels there in clear (http). Keep it on 127.0.0.1.
+- The text the agent sends back goes to the voice model. Hostile content read by the agent (a web page, for example) can push the voice to hand it a new request: you hear the announcement and the answer, not the request itself. Hermes' approvals remain the barrier.
+- Desktop: if sending a request to the agent fails, it is retried in a new session, and can then run twice.
+- OpenAI Realtime and Grok Voice: a request you cancel keeps running, and its answer is sent to the model.
 
-## Sécurité
+## Security
 
-Un scan de sécurité statique (hermes-security) a porté sur une version antérieure, privée (`ac8baef`) : statut `partial` (les 28 fichiers du périmètre relus, mais deux fiches de constat restées incomplètes), 25 constats, 16 faibles et 9 informatifs, aucun de sévérité moyenne ou plus. Cette version en corrige 11, les limites ci-dessus en déclarent 5, et les 9 autres, faibles ou informatifs, sont des durcissements en cours. Un nouveau scan de cette version publiée est prévu avant la soumission au catalogue de Hermes.
+A static security scan (hermes-security) covered an earlier, private version (`ac8baef`): status `partial` (all 28 files in scope reviewed, but two finding records left incomplete), 25 findings, 16 low and 9 informational, none medium or higher. This version fixes 11 of them, the limits above declare 5, and the other 9, low or informational, are hardening in progress. A new scan of this published version is planned before the submission to the Hermes catalog.
 
-Pour signaler une faille : en privé, onglet Security de ce repo, « Report a vulnerability ». Pas d'issue publique.
+To report a vulnerability: privately, from this repository's Security tab, "Report a vulnerability". No public issues.
 
 ## Tests
 
@@ -88,7 +89,7 @@ Pour signaler une faille : en privé, onglet Security de ce repo, « Report a vu
 pytest
 ```
 
-Le test de contrat avec les internes du host est ignoré quand Hermes n'est pas importable. Pour le jouer contre le Hermes installé, avec l'interpréteur qui fait tourner le gateway (`<python>` : le Python de Hermes, `<hermes>` : sa copie source, `<pytest>` : un dossier où pytest est installé pour ce Python) :
+The contract test against the host's internals is skipped when Hermes cannot be imported. To run it against the installed Hermes, with the interpreter that runs the gateway (`<python>`: Hermes' Python, `<hermes>`: its source checkout, `<pytest>`: a folder where pytest is installed for that Python):
 
 ```bash
 HERMES_HOME="$(mktemp -d)" TWH_HOST_CONTRACT=1 <python> -I -c "
@@ -98,8 +99,8 @@ sys.path[:0] = ['<pytest>', os.getcwd()]; import pytest
 sys.exit(pytest.main(['-q', 'tests']))"
 ```
 
-`hermes_bootstrap` charge les dépendances de Hermes comme au démarrage du gateway. Avec `TWH_HOST_CONTRACT=1`, un Hermes introuvable fait échouer le test au lieu de l'ignorer. Le `HERMES_HOME` jetable garde la suite loin des clés du profil.
+`hermes_bootstrap` loads Hermes' dependencies the way the gateway does at startup. With `TWH_HOST_CONTRACT=1`, a Hermes that cannot be found fails the test instead of skipping it. The throwaway `HERMES_HOME` keeps the suite away from the profile's keys.
 
-## Licence
+## License
 
-MIT, voir [`LICENSE`](LICENSE). Code adapté et idées reprises d'autres projets : [`NOTICE.md`](NOTICE.md).
+MIT, see [`LICENSE`](LICENSE). Code adapted and ideas taken from other projects: [`NOTICE.md`](NOTICE.md).
