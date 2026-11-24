@@ -165,12 +165,18 @@ class LiveHandlers:
 
 Connector = Callable[[str, dict[str, str]], Awaitable[Any]]
 
+#: Largest frame a provider may send. An audio chunk is a few kilobytes; 4 MiB
+#: is over a minute of 24 kHz speech. A bigger frame closes the socket (1009)
+#: instead of filling the memory.
+MAX_FRAME_BYTES = 4 * 2**20
+
 
 async def websocket_connect(url: str, headers: dict[str, str]) -> Any:
     import websockets
 
     return await websockets.connect(
-        url, additional_headers=headers, open_timeout=10, close_timeout=5, max_size=None
+        url, additional_headers=headers, open_timeout=10, close_timeout=5,
+        max_size=MAX_FRAME_BYTES,
     )
 
 

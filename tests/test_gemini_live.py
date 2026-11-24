@@ -649,3 +649,20 @@ def test_manual_close_never_redials_and_drops_late_answers():
 
     assert asyncio.run(run()) == (1, False, gemini_live.DROPPED)
     assert closed == []
+
+
+def test_the_socket_refuses_oversized_frames(monkeypatch):
+    """Every provider dials through websocket_connect: a frame bigger than the
+    cap closes the socket instead of filling the memory."""
+    import websockets
+
+    seen = {}
+
+    async def fake_connect(url, **kwargs):
+        seen.update(kwargs)
+        return "socket"
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+    assert asyncio.run(gemini_live.websocket_connect("wss://x", {"h": "v"})) == "socket"
+    assert seen["max_size"] == gemini_live.MAX_FRAME_BYTES
+    assert 2**20 <= gemini_live.MAX_FRAME_BYTES <= 16 * 2**20
